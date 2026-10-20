@@ -11,8 +11,8 @@ internal static class Program
         {
             try
             {
-                InstallerService.VerifyPackagesAsync().GetAwaiter().GetResult();
-                Console.WriteLine("Pinned BepInEx and co-op mod packages verified.");
+                InstallerService.VerifyPackagesAsync(InstallerBuild.Mode).GetAwaiter().GetResult();
+                Console.WriteLine("Pinned BepInEx and selected co-op package verified.");
                 return 0;
             }
             catch (Exception exception)
@@ -22,7 +22,7 @@ internal static class Program
             }
         }
 
-        Application.Run(new Form1());
+        Application.Run(new Form1(InstallerBuild.Mode));
         return 0;
     }
 }

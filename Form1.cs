@@ -5,6 +5,8 @@ namespace DaveDiverCoopInstaller;
 
 public sealed class Form1 : Form
 {
+    private readonly InstallMode _mode;
+
     private readonly TextBox _gamePath = new()
     {
         Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
@@ -41,9 +43,13 @@ public sealed class Form1 : Form
         Height = 160
     };
 
-    public Form1()
+    internal Form1(InstallMode mode)
     {
-        Text = "Dave the Diver Co-op Setup";
+        _mode = mode;
+        bool steamInvite = mode == InstallMode.SteamInvite;
+        Text = steamInvite
+            ? "Dave the Diver Steam Invite Setup"
+            : "Dave the Diver Co-op Setup";
         StartPosition = FormStartPosition.CenterScreen;
         MinimumSize = new Size(700, 490);
         ClientSize = new Size(700, 490);
@@ -51,9 +57,13 @@ public sealed class Form1 : Form
 
         var warning = new Label
         {
-            Text = "Community pre-release installer. Not affiliated with MINTROCKET, NEXON, Steam, or the mod authors.\r\n"
-                + "The mod uses unencrypted, unauthenticated UDP. Only play with trusted friends; never expose a public lobby.\r\n"
-                + "Two-client gameplay has not been verified by this installer project.",
+            Text = steamInvite
+                ? "Experimental Steam-invite prototype. Not affiliated with MINTROCKET, NEXON, Steam, or mod authors.\r\n"
+                    + "Only diver position and facing are synchronized; two-client gameplay has not been verified.\r\n"
+                    + "If Coop-Divers is installed, its plugin DLL will be backed up and disabled."
+                : "Community pre-release installer. Not affiliated with MINTROCKET, NEXON, Steam, or the mod authors.\r\n"
+                    + "The mod uses unencrypted, unauthenticated UDP. Only play with trusted friends; never expose a public lobby.\r\n"
+                    + "Two-client gameplay has not been verified by this installer project.",
             AutoSize = false,
             Height = 68,
             Width = 650,
@@ -77,6 +87,10 @@ public sealed class Form1 : Form
         Controls.Add(_browse);
 
         _install.Location = new Point(20, 170);
+        if (steamInvite)
+        {
+            _install.Text = "Install Steam-invite prototype";
+        }
         _install.Click += InstallClicked;
         Controls.Add(_install);
 
@@ -86,15 +100,20 @@ public sealed class Form1 : Form
 
         var details = new LinkLabel
         {
-            Text = "Mod release and source: github.com/S1ii/Coop-Divers",
+            Text = steamInvite
+                ? "Prototype source and notes: DaveTheDiverCoop"
+                : "Mod release and source: github.com/S1ii/Coop-Divers",
             AutoSize = true,
             Location = new Point(20, 242)
         };
-        details.LinkClicked += (_, _) => Process.Start(new ProcessStartInfo(
-            "https://github.com/S1ii/Coop-Divers/releases/tag/v0.18.3-ci.26")
+        if (!steamInvite)
         {
-            UseShellExecute = true
-        });
+            details.LinkClicked += (_, _) => Process.Start(new ProcessStartInfo(
+                "https://github.com/S1ii/Coop-Divers/releases/tag/v0.18.3-ci.26")
+            {
+                UseShellExecute = true
+            });
+        }
         Controls.Add(details);
 
         _log.Location = new Point(20, 270);
@@ -103,7 +122,9 @@ public sealed class Form1 : Form
         Controls.Add(_log);
 
         AcceptButton = _install;
-        AppendLog("This installer downloads pinned, hash-verified BepInEx and Coop-Divers packages.");
+        AppendLog(steamInvite
+            ? "This installer uses a pinned, hash-verified Steam-invite prototype and BepInEx package."
+            : "This installer downloads pinned, hash-verified BepInEx and Coop-Divers packages.");
         AppendLog("It will not launch the game. First launch may take longer while BepInEx creates interop files.");
     }
 
@@ -153,17 +174,32 @@ public sealed class Form1 : Form
                 AppendLog("BepInEx runtime installed.");
             }
 
-            AppendLog("Downloading and verifying Coop-Divers 0.18.3-ci.26...");
-            await InstallerService.InstallModAsync(gamePath);
+            AppendLog(_mode == InstallMode.SteamInvite
+                ? "Verifying and installing the Steam-invite prototype..."
+                : "Downloading and verifying Coop-Divers 0.18.3-ci.26...");
+            string? disabledPlugin = await InstallerService.InstallModAsync(gamePath, _mode);
+            if (disabledPlugin is not null)
+            {
+                AppendLog($"Backed up and disabled the other co-op plugin: {disabledPlugin}");
+            }
             AppendLog("Co-op mod installed successfully.");
             AppendLog("Next: launch the game once, wait for the title screen, then close it.");
-            AppendLog("After that, open Online on the title screen. Host shares their IP and port with the friend.");
+            if (_mode == InstallMode.SteamInvite)
+            {
+                AppendLog("Enter the same Blue Hole dive, host a friends-only dive, then use Invite Steam friend.");
+                AppendLog("The invited friend accepts the Steam invite and enters that same dive.");
+            }
+            else
+            {
+                AppendLog("After that, open Online on the title screen. Host shares their IP and port with the friend.");
+            }
             AppendLog("Both players need this same setup and the same game build.");
 
             MessageBox.Show(
                 this,
-                "Installation finished. Launch the game once so BepInEx can generate its local interop files, then close it and reopen the game. Use the Online menu to host or join.\r\n\r\n"
-                    + "This prerelease has not been verified in a two-client session. Only connect to trusted friends.",
+                _mode == InstallMode.SteamInvite
+                    ? "Installation finished. Launch the game once so BepInEx can generate its local interop files, then close and reopen it. Both players should enter the same Blue Hole dive; the host selects Host friends-only dive, then Invite Steam friend. The guest accepts the Steam invite and enters that dive.\r\n\r\nThis prototype only synchronizes diver position and facing. A two-client session has not been verified."
+                    : "Installation finished. Launch the game once so BepInEx can generate its local interop files, then close it and reopen the game. Use the Online menu to host or join.\r\n\r\nThis prerelease has not been verified in a two-client session. Only connect to trusted friends.",
                 "Installation complete",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);

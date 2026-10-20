@@ -11,6 +11,11 @@ internal static class InstallerService
         "DaveDiverCoopInstaller.BepInEx-Unity-IL2CPP-Win-x64-be.789.zip";
     private const string BepInExSha256 =
         "82d0e910d6c6a4c6099cc55c1ac473edef22697a333e500445524ee48bdc4f83";
+    private const string SteamInviteResourceName =
+        "DaveDiverCoopInstaller.DaveTheDiverCoop.dll";
+    private const string SteamInviteSha256 =
+        "8ebdcf5e860611d0b85d835e8cf0dfd8aee00faee0f2a9e4721f0f09c818955f";
+    private const string LicenseResourceName = "DaveDiverCoopInstaller.LICENSE";
     private const string ModDownloadUrl =
         "https://github.com/S1ii/Coop-Divers/releases/download/v0.18.3-ci.26/DaveTheDiverMP-0.18.3-ci.26.zip";
     private const string ModSha256 =
@@ -19,19 +24,33 @@ internal static class InstallerService
         "BepInEx/plugins/DaveTheDiverMP/DaveTheDiverMP.dll";
     private const string ModLicenseEntry =
         "BepInEx/plugins/DaveTheDiverMP/LICENSE.txt";
+    private const string SteamInvitePluginPath =
+        "DaveTheDiverCoop/DaveTheDiverCoop.dll";
+    private const string CommunityPluginPath =
+        "DaveTheDiverMP/DaveTheDiverMP.dll";
     private const long MaxBepInExUncompressedBytes = 64 * 1024 * 1024;
     private const int MaxModArchiveBytes = 4 * 1024 * 1024;
+    private const int MaxPluginBytes = 1024 * 1024;
 
     private static readonly HttpClient HttpClient = CreateHttpClient();
 
-    internal static async Task VerifyPackagesAsync()
+    internal static async Task VerifyPackagesAsync(InstallMode mode)
     {
         byte[] bepInEx = await ReadBepInExPayloadAsync();
         VerifySha256(bepInEx, BepInExSha256, "BepInEx payload");
         await VerifyBepInExInstallAsync();
 
-        byte[] mod = await DownloadModAsync();
-        _ = ReadModPayload(mod);
+        if (mode == InstallMode.Community)
+        {
+            byte[] mod = await DownloadModAsync();
+            _ = ReadModPayload(mod);
+            return;
+        }
+
+        byte[] plugin = await ReadSteamInvitePluginAsync();
+        VerifySha256(plugin, SteamInviteSha256, "Steam-invite plugin");
+        byte[] license = await ReadLicenseAsync();
+        await VerifySteamInviteInstallAsync(plugin, license);
     }
 
     internal static void ValidateGameFolder(string gamePath)
@@ -186,29 +205,155 @@ internal static class InstallerService
         }
     }
 
-    internal static async Task InstallModAsync(string gamePath)
+    internal static async Task<string?> InstallModAsync(string gamePath, InstallMode mode)
     {
-        byte[] archive = await DownloadModAsync();
-        ModPayload payload = ReadModPayload(archive);
-        string pluginDirectory = Path.Combine(gamePath, "BepInEx", "plugins", "DaveTheDiverMP");
-        Directory.CreateDirectory(pluginDirectory);
+        if (mode == InstallMode.Community)
+        {
+            ModPayload payload = ReadModPayload(await DownloadModAsync());
+            return await InstallPluginFilesAsync(
+                gamePath,
+                InstallMode.Community,
+                payload.Plugin,
+                payload.License);
+        }
 
-        string dllPath = Path.Combine(pluginDirectory, "DaveTheDiverMP.dll");
-        string licensePath = Path.Combine(pluginDirectory, "LICENSE.txt");
-        BackupExistingFile(dllPath);
-        BackupExistingFile(licensePath);
+        byte[] plugin = await ReadSteamInvitePluginAsync();
+        VerifySha256(plugin, SteamInviteSha256, "Steam-invite plugin");
+        return await InstallPluginFilesAsync(
+            gamePath,
+            InstallMode.SteamInvite,
+            plugin,
+            await ReadLicenseAsync());
+    }
 
-        await WriteAtomicallyAsync(dllPath, payload.Plugin);
-        await WriteAtomicallyAsync(licensePath, payload.License);
+    private static async Task<string?> InstallPluginFilesAsync(
+        string gamePath,
+        InstallMode mode,
+        byte[] plugin,
+        byte[] license)
+    {
+        string pluginsDirectory = Path.Combine(gamePath, "BepInEx", "plugins");
+        string targetDirectory = Path.Combine(
+            pluginsDirectory,
+            mode == InstallMode.SteamInvite ? "DaveTheDiverCoop" : "DaveTheDiverMP");
+        string targetDll = Path.Combine(
+            targetDirectory,
+            mode == InstallMode.SteamInvite ? "DaveTheDiverCoop.dll" : "DaveTheDiverMP.dll");
+        string targetLicense = Path.Combine(targetDirectory, "LICENSE.txt");
+        string conflictingDll = Path.Combine(
+            pluginsDirectory,
+            mode == InstallMode.SteamInvite ? CommunityPluginPath : SteamInvitePluginPath);
+
+        Directory.CreateDirectory(targetDirectory);
+        string? disabledPlugin = null;
+        string? dllBackup = null;
+        string? licenseBackup = null;
+        bool dllWriteAttempted = false;
+        bool licenseWriteAttempted = false;
+
+        try
+        {
+            disabledPlugin = DisableExistingPlugin(conflictingDll);
+            dllBackup = BackupExistingFile(targetDll);
+            licenseBackup = BackupExistingFile(targetLicense);
+            dllWriteAttempted = true;
+            await WriteAtomicallyAsync(targetDll, plugin);
+            licenseWriteAttempted = true;
+            await WriteAtomicallyAsync(targetLicense, license);
+            return disabledPlugin;
+        }
+        catch (Exception installException)
+        {
+            var rollbackExceptions = new List<Exception>();
+            if (dllWriteAttempted)
+            {
+                RestoreBackup(targetDll, dllBackup, rollbackExceptions);
+            }
+            if (licenseWriteAttempted)
+            {
+                RestoreBackup(targetLicense, licenseBackup, rollbackExceptions);
+            }
+            RestoreDisabledPlugin(conflictingDll, disabledPlugin, rollbackExceptions);
+
+            if (rollbackExceptions.Count > 0)
+            {
+                rollbackExceptions.Insert(0, installException);
+                throw new AggregateException(
+                    "Plugin installation failed and rollback was incomplete.",
+                    rollbackExceptions);
+            }
+
+            throw;
+        }
+    }
+
+    private static string? DisableExistingPlugin(string pluginPath)
+    {
+        if (!File.Exists(pluginPath))
+        {
+            return null;
+        }
+
+        string disabledPath = pluginPath + ".disabled-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff");
+        if (File.Exists(disabledPath))
+        {
+            disabledPath += "-" + Guid.NewGuid().ToString("N");
+        }
+
+        File.Move(pluginPath, disabledPath);
+        return disabledPath;
+    }
+
+    private static void RestoreDisabledPlugin(
+        string originalPath,
+        string? disabledPath,
+        List<Exception> rollbackExceptions)
+    {
+        if (disabledPath is null || !File.Exists(disabledPath))
+        {
+            return;
+        }
+
+        try
+        {
+            if (!File.Exists(originalPath))
+            {
+                File.Move(disabledPath, originalPath);
+            }
+        }
+        catch (Exception exception)
+        {
+            rollbackExceptions.Add(exception);
+        }
     }
 
     private static async Task<byte[]> ReadBepInExPayloadAsync()
     {
+        return await ReadEmbeddedResourceAsync(BepInExResourceName, MaxBepInExUncompressedBytes);
+    }
+
+    private static async Task<byte[]> ReadSteamInvitePluginAsync()
+    {
+        return await ReadEmbeddedResourceAsync(SteamInviteResourceName, MaxPluginBytes);
+    }
+
+    private static async Task<byte[]> ReadLicenseAsync()
+    {
+        return await ReadEmbeddedResourceAsync(LicenseResourceName, MaxPluginBytes);
+    }
+
+    private static async Task<byte[]> ReadEmbeddedResourceAsync(string resourceName, long maxBytes)
+    {
         await using Stream resource = Assembly.GetExecutingAssembly()
-            .GetManifestResourceStream(BepInExResourceName)
-            ?? throw new InvalidOperationException("The bundled BepInEx runtime payload is missing.");
+            .GetManifestResourceStream(resourceName)
+            ?? throw new InvalidOperationException($"The bundled resource '{resourceName}' is missing.");
         using var buffer = new MemoryStream();
         await resource.CopyToAsync(buffer);
+        if (buffer.Length > maxBytes)
+        {
+            throw new InvalidDataException($"The bundled resource '{resourceName}' exceeded its expected size.");
+        }
+
         return buffer.ToArray();
     }
 
@@ -330,6 +475,65 @@ internal static class InstallerService
         }
     }
 
+    private static async Task VerifySteamInviteInstallAsync(byte[] plugin, byte[] license)
+    {
+        string temporaryGame = Path.Combine(
+            Path.GetTempPath(),
+            "DaveDiverSteamInviteSetup-verify-" + Guid.NewGuid().ToString("N"));
+        string communityDll = Path.Combine(
+            temporaryGame,
+            "BepInEx",
+            "plugins",
+            "DaveTheDiverMP",
+            "DaveTheDiverMP.dll");
+        byte[] existingCommunityPlugin = { 0x4D, 0x5A, 0x01, 0x02 };
+        Directory.CreateDirectory(Path.GetDirectoryName(communityDll)!);
+
+        try
+        {
+            await File.WriteAllBytesAsync(communityDll, existingCommunityPlugin);
+            string? disabledPlugin = await InstallPluginFilesAsync(
+                temporaryGame,
+                InstallMode.SteamInvite,
+                plugin,
+                license);
+
+            string installedPlugin = Path.Combine(
+                temporaryGame,
+                "BepInEx",
+                "plugins",
+                SteamInvitePluginPath);
+            string installedLicense = Path.Combine(
+                temporaryGame,
+                "BepInEx",
+                "plugins",
+                "DaveTheDiverCoop",
+                "LICENSE.txt");
+            string[] disabledCommunityPlugins = Directory.GetFiles(
+                Path.GetDirectoryName(communityDll)!,
+                "DaveTheDiverMP.dll.disabled-*");
+
+            if (!File.Exists(installedPlugin)
+                || !File.ReadAllBytes(installedPlugin).SequenceEqual(plugin)
+                || !File.Exists(installedLicense)
+                || !File.ReadAllBytes(installedLicense).SequenceEqual(license)
+                || disabledPlugin is null
+                || disabledCommunityPlugins.Length != 1
+                || !File.ReadAllBytes(disabledCommunityPlugins[0]).SequenceEqual(existingCommunityPlugin))
+            {
+                throw new InvalidDataException(
+                    "The Steam-invite package installation or reversible mod switch failed verification.");
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(temporaryGame))
+            {
+                Directory.Delete(temporaryGame, recursive: true);
+            }
+        }
+    }
+
     private static async Task WriteAtomicallyAsync(string destination, byte[] content)
     {
         string temporary = destination + "." + Guid.NewGuid().ToString("N") + ".tmp";
@@ -347,11 +551,11 @@ internal static class InstallerService
         }
     }
 
-    private static void BackupExistingFile(string path)
+    private static string? BackupExistingFile(string path)
     {
         if (!File.Exists(path))
         {
-            return;
+            return null;
         }
 
         string backup = path + ".backup-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss");
@@ -360,6 +564,29 @@ internal static class InstallerService
             backup += "-" + Guid.NewGuid().ToString("N");
         }
         File.Copy(path, backup, overwrite: false);
+        return backup;
+    }
+
+    private static void RestoreBackup(
+        string originalPath,
+        string? backupPath,
+        List<Exception> rollbackExceptions)
+    {
+        try
+        {
+            if (backupPath is not null && File.Exists(backupPath))
+            {
+                File.Copy(backupPath, originalPath, overwrite: true);
+            }
+            else if (File.Exists(originalPath))
+            {
+                File.Delete(originalPath);
+            }
+        }
+        catch (Exception exception)
+        {
+            rollbackExceptions.Add(exception);
+        }
     }
 
     private static void VerifySha256(byte[] bytes, string expected, string packageName)

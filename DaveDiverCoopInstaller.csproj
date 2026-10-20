@@ -8,12 +8,17 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>DaveDiverCoopSetup</AssemblyName>
     <RootNamespace>DaveDiverCoopInstaller</RootNamespace>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="SteamInvitePrototype\**\*.cs" />
     <EmbeddedResource Include="BepInEx-Unity-IL2CPP-Win-x64-be.789.zip"
                       LogicalName="DaveDiverCoopInstaller.BepInEx-Unity-IL2CPP-Win-x64-be.789.zip" />
+    <EmbeddedResource Include="DaveTheDiverCoop.dll"
+                      LogicalName="DaveDiverCoopInstaller.DaveTheDiverCoop.dll" />
+    <EmbeddedResource Include="LICENSE"
+                      LogicalName="DaveDiverCoopInstaller.LICENSE" />
   </ItemGroup>
 
 </Project>

@@ -13,6 +13,14 @@ players need the same Dave the Diver game build and co-op mod version. After
 the first launch initializes BepInEx, close the game and reopen it to use the
 title-screen Online menu.
 
+For the separate experimental Steam-invite prototype, use
+[DaveDiverSteamInviteSetup.exe](https://github.com/FireTva/dave-the-diver-coop/releases/latest/download/DaveDiverSteamInviteSetup.exe)
+instead. It installs a different mod and backs up/disables Coop-Divers to avoid
+running both plugins together. The main installer in release `v1.1.0` can switch
+back to Coop-Divers and back up/disable the Steam-invite plugin.
+The [Steam-invite prototype source archive](https://github.com/FireTva/dave-the-diver-coop/releases/latest/download/SteamInvitePrototype-source.zip)
+is included with the release.
+
 ## What it installs
 
 - BepInEx Unity IL2CPP Windows x64 `6.0.0-be.789` and its Doorstop loader. The
@@ -46,6 +54,12 @@ Il2CppInterop assembly-registration errors and a Harmony compatibility warning.
 We have not verified a two-client connection, so this installer does not claim
 that online co-op works end-to-end.
 
+The separate Steam-invite prototype opens Steam's friend-invite overlay from a
+friends-only lobby and accepts Steam lobby invites. Both players still need to
+enter the same Blue Hole dive; only diver position and facing are synchronized.
+It has also not been tested with two clients and is not a complete shared-world
+co-op implementation.
+
 Do not install on a game copy that is currently running. This helper does not
 touch saves, create firewall rules, configure routers, or alter Steam Cloud.
 
@@ -56,14 +70,17 @@ Requires the .NET 8 SDK on Windows:
 ```powershell
 dotnet build .\DaveDiverCoopInstaller.csproj -c Release
 dotnet run --project .\DaveDiverCoopInstaller.csproj -c Release -- --verify
+dotnet build .\DaveDiverSteamInviteSetup.csproj -c Release
+dotnet run --project .\DaveDiverSteamInviteSetup.csproj -c Release -- --verify
 dotnet publish .\DaveDiverCoopInstaller.csproj -c Release -r win-x64 --self-contained true `
   -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true `
   -p:IncludeNativeLibrariesForSelfExtract=true -o .\publish
 ```
 
-The published single-file app is `publish\DaveDiverCoopSetup.exe`. `--verify`
-checks the embedded BepInEx payload and downloads/checks the pinned co-op release
-without installing anything.
+The published single-file apps are `publish\DaveDiverCoopSetup.exe` and
+`publish\DaveDiverSteamInviteSetup.exe`. `--verify` checks the selected installer
+payload, BepInEx extraction, and reversible plugin-switch behavior without
+installing into the game folder.
 
 ## Sources and licenses
 
