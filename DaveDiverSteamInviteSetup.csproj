@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>DaveDiverSteamInviteSetup</AssemblyName>
+    <RootNamespace>DaveDiverCoopInstaller</RootNamespace>
+    <Version>1.1.0</Version>
+    <DefineConstants>$(DefineConstants);STEAM_INVITE_SETUP</DefineConstants>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="Form1.cs" />
+    <Compile Include="InstallerService.cs" />
+    <Compile Include="InstallMode.cs" />
+    <EmbeddedResource Include="BepInEx-Unity-IL2CPP-Win-x64-be.789.zip"
+                      LogicalName="DaveDiverCoopInstaller.BepInEx-Unity-IL2CPP-Win-x64-be.789.zip" />
+    <EmbeddedResource Include="DaveTheDiverCoop.dll"
+                      LogicalName="DaveDiverCoopInstaller.DaveTheDiverCoop.dll" />
+    <EmbeddedResource Include="LICENSE"
+                      LogicalName="DaveDiverCoopInstaller.LICENSE" />
+  </ItemGroup>
+
+</Project>
