@@ -4,6 +4,15 @@ A Windows x64 installer for the community [Coop-Divers](https://github.com/S1ii/
 pre-release. This is an unofficial helper for the Dave the Diver co-op work tracked
 in [coop-anything issue #42](https://github.com/cranebeaker/coop-anything/issues/42).
 
+## Download and quick start
+
+Get the [latest installer](https://github.com/FireTva/dave-the-diver-coop/releases/latest/download/DaveDiverCoopSetup.exe)
+and its [SHA-256 checksum](https://github.com/FireTva/dave-the-diver-coop/releases/latest/download/DaveDiverCoopSetup.exe.sha256).
+Run the installer on both PCs and select each player's Steam game folder. Both
+players need the same Dave the Diver game build and co-op mod version. After
+the first launch initializes BepInEx, close the game and reopen it to use the
+title-screen Online menu.
+
 ## What it installs
 
 - BepInEx Unity IL2CPP Windows x64 `6.0.0-be.789` and its Doorstop loader. The
