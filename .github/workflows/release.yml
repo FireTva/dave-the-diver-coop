@@ -6,6 +6,11 @@ on:
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Optional release tag, such as v1.0.0. Leave blank to build only."
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -41,13 +46,17 @@ jobs:
           if-no-files-found: error
           retention-days: 30
       - name: Publish GitHub release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
-          gh release create "$env:GITHUB_REF_NAME" `
+          $tag = $env:RELEASE_TAG
+          if (-not $tag) { $tag = $env:GITHUB_REF_NAME }
+          gh release create "$tag" `
             .\publish\DaveDiverCoopSetup.exe `
             .\publish\DaveDiverCoopSetup.exe.sha256 `
-            --title "Dave the Diver Co-op Setup $env:GITHUB_REF_NAME" `
-            --notes "Self-contained Windows x64 installer. See repository README for tested status and networking security limitations."
+            --target main `
+            --title "Dave the Diver Co-op Setup $tag" `
+            --notes "Self-contained Windows x64 installer. See the repository README for tested status and networking security limitations."
