@@ -1,0 +1,5 @@
+bin/
+obj/
+payload-stage/
+publish/
+*.csproj.user
