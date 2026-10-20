@@ -1,0 +1,82 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GamePath Condition="'$(GamePath)' == ''">$(MSBuildThisFileDirectory)..\..\Steam-Test-Copy</GamePath>
+    <BepInExCorePath>$(GamePath)\BepInEx\core</BepInExCorePath>
+    <BepInExInteropPath>$(GamePath)\BepInEx\interop</BepInExInteropPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="BepInEx.Core">
+      <HintPath>$(BepInExCorePath)\BepInEx.Core.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="BepInEx.Unity.IL2CPP">
+      <HintPath>$(BepInExCorePath)\BepInEx.Unity.IL2CPP.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(BepInExCorePath)\0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Il2CppInterop.Common">
+      <HintPath>$(BepInExCorePath)\Il2CppInterop.Common.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Il2CppInterop.Runtime">
+      <HintPath>$(BepInExCorePath)\Il2CppInterop.Runtime.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp"
+               Condition="Exists('$(BepInExInteropPath)\Assembly-CSharp.dll')">
+      <HintPath>$(BepInExInteropPath)\Assembly-CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="com.rlabrecque.steamworks.net"
+               Condition="Exists('$(BepInExInteropPath)\com.rlabrecque.steamworks.net.dll')">
+      <HintPath>$(BepInExInteropPath)\com.rlabrecque.steamworks.net.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule"
+               Condition="Exists('$(BepInExInteropPath)\UnityEngine.CoreModule.dll')">
+      <HintPath>$(BepInExInteropPath)\UnityEngine.CoreModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityEngine.IMGUIModule"
+               Condition="Exists('$(BepInExInteropPath)\UnityEngine.IMGUIModule.dll')">
+      <HintPath>$(BepInExInteropPath)\UnityEngine.IMGUIModule.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UniRx"
+               Condition="Exists('$(BepInExInteropPath)\UniRx.dll')">
+      <HintPath>$(BepInExInteropPath)\UniRx.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Il2Cppmscorlib"
+               Condition="Exists('$(BepInExInteropPath)\Il2Cppmscorlib.dll')">
+      <HintPath>$(BepInExInteropPath)\Il2Cppmscorlib.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <RequiredInteropAssembly Include="$(BepInExCorePath)\0Harmony.dll" />
+    <RequiredInteropAssembly Include="$(BepInExInteropPath)\Assembly-CSharp.dll" />
+    <RequiredInteropAssembly Include="$(BepInExInteropPath)\com.rlabrecque.steamworks.net.dll" />
+    <RequiredInteropAssembly Include="$(BepInExInteropPath)\UnityEngine.CoreModule.dll" />
+    <RequiredInteropAssembly Include="$(BepInExInteropPath)\UnityEngine.IMGUIModule.dll" />
+    <RequiredInteropAssembly Include="$(BepInExInteropPath)\UniRx.dll" />
+    <RequiredInteropAssembly Include="$(BepInExInteropPath)\Il2Cppmscorlib.dll" />
+  </ItemGroup>
+
+  <Target Name="ValidateBepInExInteropAssemblies"
+          BeforeTargets="ResolveReferences"
+          Condition="'$(DesignTimeBuild)' != 'true'">
+    <Error Condition="!Exists('%(RequiredInteropAssembly.Identity)')"
+           Text="Missing required BepInEx interop assembly '%(RequiredInteropAssembly.Identity)'. Boot the isolated game copy through BepInEx first; do not launch the canonical Steam install." />
+  </Target>
+
+</Project>

@@ -10,11 +10,11 @@ internal static class InstallerService
     private const string BepInExResourceName =
         "DaveDiverCoopInstaller.BepInEx-Unity-IL2CPP-Win-x64-be.789.zip";
     private const string BepInExSha256 =
-        "82d0e910d6c6a4c6099cc55c1ac473edef22697a333e500445524ee48bdc4f83";
+        "6f7b3edde53186d3ae3dbbfaa46704ef3192069687d701922e0063b0a25246c4";
     private const string SteamInviteResourceName =
         "DaveDiverCoopInstaller.DaveTheDiverCoop.dll";
     private const string SteamInviteSha256 =
-        "8ebdcf5e860611d0b85d835e8cf0dfd8aee00faee0f2a9e4721f0f09c818955f";
+        "e35620d29c1acc74b8f0f0a85549aaeff027ae2502f7eac894f3f1fd7da9853b";
     private const string LicenseResourceName = "DaveDiverCoopInstaller.LICENSE";
     private const string ModDownloadUrl =
         "https://github.com/S1ii/Coop-Divers/releases/download/v0.18.3-ci.26/DaveTheDiverMP-0.18.3-ci.26.zip";
@@ -28,7 +28,17 @@ internal static class InstallerService
         "DaveTheDiverCoop/DaveTheDiverCoop.dll";
     private const string CommunityPluginPath =
         "DaveTheDiverMP/DaveTheDiverMP.dll";
-    private const long MaxBepInExUncompressedBytes = 64 * 1024 * 1024;
+    private static readonly string[] RequiredBepInExSupportAssemblies =
+    {
+        "Microsoft.Bcl.AsyncInterfaces.dll",
+        "Microsoft.Extensions.DependencyInjection.Abstractions.dll",
+        "Microsoft.Extensions.DependencyInjection.dll",
+        "Microsoft.Extensions.Logging.Abstractions.dll",
+        "Microsoft.Extensions.Logging.dll",
+        "Microsoft.Extensions.Options.dll",
+        "Microsoft.Extensions.Primitives.dll"
+    };
+    private const long MaxBepInExUncompressedBytes = 128 * 1024 * 1024;
     private const int MaxModArchiveBytes = 4 * 1024 * 1024;
     private const int MaxPluginBytes = 1024 * 1024;
 
@@ -39,6 +49,7 @@ internal static class InstallerService
         byte[] bepInEx = await ReadBepInExPayloadAsync();
         VerifySha256(bepInEx, BepInExSha256, "BepInEx payload");
         await VerifyBepInExInstallAsync();
+        await VerifyBepInExRuntimeRepairAsync();
 
         if (mode == InstallMode.Community)
         {
@@ -81,7 +92,8 @@ internal static class InstallerService
     {
         return File.Exists(Path.Combine(gamePath, "winhttp.dll"))
             || File.Exists(Path.Combine(gamePath, "doorstop_config.ini"))
-            || Directory.Exists(Path.Combine(gamePath, "BepInEx"));
+            || Directory.Exists(Path.Combine(gamePath, "BepInEx"))
+            || Directory.Exists(Path.Combine(gamePath, "dotnet"));
     }
 
     internal static void ValidateExistingBepInEx(string gamePath)
@@ -108,6 +120,42 @@ internal static class InstallerService
         }
     }
 
+    internal static async Task EnsureBepInExRuntimeAsync(string gamePath)
+    {
+        string runtimePath = Path.Combine(gamePath, "dotnet");
+        if (Directory.Exists(runtimePath))
+        {
+            string[] existingFiles = Directory.GetFiles(runtimePath, "*", SearchOption.AllDirectories);
+            if (existingFiles.Length > 0)
+            {
+                ValidateBepInExRuntimeCore(gamePath);
+                await InstallMissingBepInExSupportAssembliesAsync(gamePath);
+                ValidateBepInExRuntime(gamePath);
+                return;
+            }
+        }
+
+        byte[] archiveBytes = await ReadBepInExPayloadAsync();
+        VerifySha256(archiveBytes, BepInExSha256, "BepInEx payload");
+        string[] required = new[]
+        {
+            Path.Combine("dotnet", ".version"),
+            Path.Combine("dotnet", "coreclr.dll"),
+            Path.Combine("dotnet", "System.Private.CoreLib.dll"),
+            Path.Combine("dotnet", "Microsoft.NETCore.App.deps.json"),
+            Path.Combine("dotnet", "LICENSE.txt"),
+            Path.Combine("dotnet", "ThirdPartyNotices.txt")
+        }.Concat(RequiredBepInExSupportAssemblies.Select(file => Path.Combine("dotnet", file)))
+            .ToArray();
+
+        await InstallArchiveEntriesAsync(
+            gamePath,
+            archiveBytes,
+            entry => entry.FullName.StartsWith("dotnet/", StringComparison.Ordinal),
+            required);
+        ValidateBepInExRuntime(gamePath);
+    }
+
     internal static async Task InstallBepInExAsync(string gamePath)
     {
         byte[] archiveBytes = await ReadBepInExPayloadAsync();
@@ -118,6 +166,56 @@ internal static class InstallerService
             throw new InvalidOperationException("BepInEx files appeared in the game folder during installation. No files were overwritten.");
         }
 
+        string[] required =
+        {
+            Path.Combine("BepInEx", "core", "BepInEx.Core.dll"),
+            Path.Combine("BepInEx", "core", "BepInEx.Unity.IL2CPP.dll"),
+            "winhttp.dll",
+            "doorstop_config.ini",
+            Path.Combine("dotnet", ".version"),
+            Path.Combine("dotnet", "coreclr.dll"),
+            Path.Combine("dotnet", "System.Private.CoreLib.dll"),
+            Path.Combine("dotnet", "Microsoft.NETCore.App.deps.json"),
+            Path.Combine("dotnet", "LICENSE.txt"),
+            Path.Combine("dotnet", "ThirdPartyNotices.txt")
+        };
+
+        await InstallArchiveEntriesAsync(
+            gamePath,
+            archiveBytes,
+            _ => true,
+            required);
+        ValidateBepInExRuntime(gamePath);
+    }
+
+    private static async Task InstallMissingBepInExSupportAssembliesAsync(string gamePath)
+    {
+        string runtimePath = Path.Combine(gamePath, "dotnet");
+        string[] missing = RequiredBepInExSupportAssemblies
+            .Where(file => !File.Exists(Path.Combine(runtimePath, file)))
+            .ToArray();
+        if (missing.Length == 0)
+        {
+            return;
+        }
+
+        byte[] archiveBytes = await ReadBepInExPayloadAsync();
+        VerifySha256(archiveBytes, BepInExSha256, "BepInEx payload");
+        var missingSet = new HashSet<string>(missing, StringComparer.Ordinal);
+        await InstallArchiveEntriesAsync(
+            gamePath,
+            archiveBytes,
+            entry => entry.FullName.StartsWith("dotnet/", StringComparison.Ordinal)
+                && missingSet.Contains(Path.GetFileName(entry.FullName)),
+            missing.Select(file => Path.Combine("dotnet", file)).ToArray());
+    }
+
+    private static async Task InstallArchiveEntriesAsync(
+        string gamePath,
+        byte[] archiveBytes,
+        Func<ZipArchiveEntry, bool> includeEntry,
+        IReadOnlyList<string> requiredFiles)
+    {
         string staging = Path.Combine(Path.GetTempPath(), "DaveDiverCoopSetup", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(staging);
         var createdFiles = new List<string>();
@@ -131,6 +229,11 @@ internal static class InstallerService
 
             foreach (ZipArchiveEntry entry in archive.Entries)
             {
+                if (!includeEntry(entry))
+                {
+                    continue;
+                }
+
                 if (entry.FullName.EndsWith("/", StringComparison.Ordinal)
                     || entry.FullName.EndsWith("\\", StringComparison.Ordinal))
                 {
@@ -150,18 +253,11 @@ internal static class InstallerService
                 await input.CopyToAsync(output);
             }
 
-            string[] required =
-            {
-                Path.Combine("BepInEx", "core", "BepInEx.Core.dll"),
-                Path.Combine("BepInEx", "core", "BepInEx.Unity.IL2CPP.dll"),
-                "winhttp.dll",
-                "doorstop_config.ini"
-            };
-            foreach (string file in required)
+            foreach (string file in requiredFiles)
             {
                 if (!File.Exists(Path.Combine(staging, file)))
                 {
-                    throw new InvalidDataException($"BepInEx payload is missing {file}.");
+                    throw new InvalidDataException($"BepInEx payload is missing required file {file}.");
                 }
             }
 
@@ -202,6 +298,41 @@ internal static class InstallerService
         finally
         {
             Directory.Delete(staging, recursive: true);
+        }
+    }
+
+    private static void ValidateBepInExRuntime(string gamePath)
+    {
+        ValidateBepInExRuntimeCore(gamePath);
+        string runtimePath = Path.Combine(gamePath, "dotnet");
+        string[] missing = RequiredBepInExSupportAssemblies
+            .Where(file => !File.Exists(Path.Combine(runtimePath, file)))
+            .ToArray();
+        if (missing.Length > 0)
+        {
+            throw new InvalidOperationException(
+                $"The local BepInEx runtime is missing required assemblies: {string.Join(", ", missing)}.");
+        }
+    }
+
+    private static void ValidateBepInExRuntimeCore(string gamePath)
+    {
+        string runtimePath = Path.Combine(gamePath, "dotnet");
+        string versionPath = Path.Combine(runtimePath, ".version");
+        string[] required =
+        {
+            Path.Combine(runtimePath, "coreclr.dll"),
+            Path.Combine(runtimePath, "System.Private.CoreLib.dll"),
+            Path.Combine(runtimePath, "Microsoft.NETCore.App.deps.json"),
+            Path.Combine(runtimePath, "LICENSE.txt"),
+            Path.Combine(runtimePath, "ThirdPartyNotices.txt")
+        };
+        string version = File.Exists(versionPath) ? File.ReadAllText(versionPath) : string.Empty;
+        if (!version.Contains("6.0.7", StringComparison.Ordinal)
+            || required.Any(file => !File.Exists(file)))
+        {
+            throw new InvalidOperationException(
+                "The local .NET Core runtime is incomplete or is not the tested 6.0.7 build. Back it up before repairing BepInEx.");
         }
     }
 
@@ -472,6 +603,40 @@ internal static class InstallerService
         finally
         {
             Directory.Delete(temporaryGame, recursive: true);
+        }
+    }
+
+    private static async Task VerifyBepInExRuntimeRepairAsync()
+    {
+        string temporaryGame = Path.Combine(
+            Path.GetTempPath(),
+            "DaveDiverCoopSetup-runtime-repair-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(temporaryGame);
+
+        try
+        {
+            await InstallBepInExAsync(temporaryGame);
+            Directory.Delete(Path.Combine(temporaryGame, "dotnet"), recursive: true);
+
+            await EnsureBepInExRuntimeAsync(temporaryGame);
+            ValidateExistingBepInEx(temporaryGame);
+            ValidateBepInExRuntime(temporaryGame);
+
+            string runtimePath = Path.Combine(temporaryGame, "dotnet");
+            foreach (string assembly in RequiredBepInExSupportAssemblies)
+            {
+                File.Delete(Path.Combine(runtimePath, assembly));
+            }
+
+            await EnsureBepInExRuntimeAsync(temporaryGame);
+            ValidateBepInExRuntime(temporaryGame);
+        }
+        finally
+        {
+            if (Directory.Exists(temporaryGame))
+            {
+                Directory.Delete(temporaryGame, recursive: true);
+            }
         }
     }
 

@@ -59,7 +59,7 @@ public sealed class Form1 : Form
         {
             Text = steamInvite
                 ? "Experimental Steam-invite prototype. Not affiliated with MINTROCKET, NEXON, Steam, or mod authors.\r\n"
-                    + "Only diver position and facing are synchronized; two-client gameplay has not been verified.\r\n"
+                    + "A second diver is shown only in the same Blue Hole; multiplayer features are unverified.\r\n"
                     + "If Coop-Divers is installed, its plugin DLL will be backed up and disabled."
                 : "Community pre-release installer. Not affiliated with MINTROCKET, NEXON, Steam, or the mod authors.\r\n"
                     + "The mod uses unencrypted, unauthenticated UDP. Only play with trusted friends; never expose a public lobby.\r\n"
@@ -174,6 +174,10 @@ public sealed class Form1 : Form
                 AppendLog("BepInEx runtime installed.");
             }
 
+            AppendLog("Checking the local .NET 6 runtime required by BepInEx...");
+            await InstallerService.EnsureBepInExRuntimeAsync(gamePath);
+            AppendLog("BepInEx .NET 6 runtime is present and verified.");
+
             AppendLog(_mode == InstallMode.SteamInvite
                 ? "Verifying and installing the Steam-invite prototype..."
                 : "Downloading and verifying Coop-Divers 0.18.3-ci.26...");
@@ -186,8 +190,8 @@ public sealed class Form1 : Form
             AppendLog("Next: launch the game once, wait for the title screen, then close it.");
             if (_mode == InstallMode.SteamInvite)
             {
-                AppendLog("Enter the same Blue Hole dive, host a friends-only dive, then use Invite Steam friend.");
-                AppendLog("The invited friend accepts the Steam invite and enters that same dive.");
+                AppendLog("In any gameplay scene, host a friends-only session and choose Invite Steam friend.");
+                AppendLog("A visible second diver requires both players to enter the same Blue Hole dive.");
             }
             else
             {
@@ -198,7 +202,7 @@ public sealed class Form1 : Form
             MessageBox.Show(
                 this,
                 _mode == InstallMode.SteamInvite
-                    ? "Installation finished. Launch the game once so BepInEx can generate its local interop files, then close and reopen it. Both players should enter the same Blue Hole dive; the host selects Host friends-only dive, then Invite Steam friend. The guest accepts the Steam invite and enters that dive.\r\n\r\nThis prototype only synchronizes diver position and facing. A two-client session has not been verified."
+                    ? "Installation finished. Launch the game once so BepInEx can generate its local interop files, then close and reopen it. From any gameplay scene, the host creates a friends-only session and selects Invite Steam friend. A visible second diver requires both players to enter the same Blue Hole dive.\r\n\r\nBoat and sushi-bar character rendering and two-client multiplayer have not been verified."
                     : "Installation finished. Launch the game once so BepInEx can generate its local interop files, then close it and reopen the game. Use the Online menu to host or join.\r\n\r\nThis prerelease has not been verified in a two-client session. Only connect to trusted friends.",
                 "Installation complete",
                 MessageBoxButtons.OK,

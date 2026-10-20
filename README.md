@@ -16,10 +16,33 @@ title-screen Online menu.
 For the separate experimental Steam-invite prototype, use
 [DaveDiverSteamInviteSetup.exe](https://github.com/FireTva/dave-the-diver-coop/releases/latest/download/DaveDiverSteamInviteSetup.exe)
 instead. It installs a different mod and backs up/disables Coop-Divers to avoid
-running both plugins together. The main installer in release `v1.1.0` can switch
+running both plugins together. The main installer in release `v1.1.2` can switch
 back to Coop-Divers and back up/disable the Steam-invite plugin.
 The [Steam-invite prototype source archive](https://github.com/FireTva/dave-the-diver-coop/releases/latest/download/SteamInvitePrototype-source.zip)
 is included with the release.
+
+### Linux and Steam Deck (Proton)
+
+The Linux downloader installs the Windows game files needed by Proton; it does
+not install the game or configure Steam automatically. Close the game, then run
+in a terminal:
+
+```bash
+curl -fL https://github.com/FireTva/dave-the-diver-coop/releases/latest/download/install-steam-invite-linux.sh \
+  -o install-steam-invite-linux.sh
+bash install-steam-invite-linux.sh
+```
+
+The script searches common Steam library locations. To choose a library
+explicitly, pass the game folder:
+
+```bash
+bash install-steam-invite-linux.sh --game-dir "$HOME/.local/share/Steam/steamapps/common/DAVE THE DIVER"
+```
+
+After installation, set this game's Steam launch option to
+`WINEDLLOVERRIDES="winhttp=n,b" %command%`. Install the mod on both players'
+computers. The script requires `curl`, `sha256sum`, and `unzip`.
 
 ## What it installs
 
@@ -36,11 +59,14 @@ game and never modifies save files. On a clean game folder it installs BepInEx;
 when an existing BepInEx installation is detected, it only proceeds if the
 existing runtime is the tested `6.0.0-be.789` build. It will not overwrite another
 loader version. Replaced copies of the mod DLL/license are backed up beside the
-installed files.
+installed files. The Linux downloader applies the same BepInEx core build check,
+preserves existing files, and backs up the previous co-op plugin before switching.
 
-The first game launch after installation can take longer while BepInEx generates
-local IL2CPP interop files. The helper asks the user to start the game and close
-it before reopening it to use the title-screen Online menu.
+The v1.1.2 installer includes the .NET 6.0.7 runtime and the Microsoft.Extensions
+assemblies required by BepInEx to start. It repairs an existing compatible
+installation when the runtime or those support assemblies are missing, without
+overwriting existing runtime files. The first game launch after installation can
+take longer while BepInEx generates local IL2CPP interop files.
 
 ## Important limitations and safety
 
@@ -54,11 +80,16 @@ Il2CppInterop assembly-registration errors and a Harmony compatibility warning.
 We have not verified a two-client connection, so this installer does not claim
 that online co-op works end-to-end.
 
-The separate Steam-invite prototype opens Steam's friend-invite overlay from a
-friends-only lobby and accepts Steam lobby invites. Both players still need to
-enter the same Blue Hole dive; only diver position and facing are synchronized.
-It has also not been tested with two clients and is not a complete shared-world
-co-op implementation.
+The separate Steam-invite prototype provides in-game host/join controls and a
+friends-only Steam lobby. Its Co-op Settings overlay is visible during gameplay
+and while the game's Settings screen is open; it does not add buttons to the
+native Settings menu. Lobby membership and scene presence persist across game
+scenes. A second diver is rendered only when both players are in the same Blue
+Hole dive; in boat and sushi-bar scenes the panel shows the friend's name and
+scene but does not render a second character or synchronize world interactions.
+Returning from a dive while connected uses an accept/decline request. None of the
+Steam-invite scene-presence, return-vote, or two-client flows have been verified
+with a second client, so this remains experimental.
 
 Do not install on a game copy that is currently running. This helper does not
 touch saves, create firewall rules, configure routers, or alter Steam Cloud.
@@ -93,8 +124,14 @@ installing into the game folder.
   commit `6cea286d204eb3754d3b8363a5a1fd6640164a49`. The original downloaded
   archive SHA-256 was
   `29519614d0121a3eecf9df6d61436f0c09a2c5f85b0a7d92559a135ce3055eb1`.
-- The repackaged BepInEx runtime embedded in this setup project's payload has
-  SHA-256 `82d0e910d6c6a4c6099cc55c1ac473edef22697a333e500445524ee48bdc4f83`.
+- The repackaged BepInEx and .NET runtime payload embedded in this setup project's
+  installer has SHA-256 `6f7b3edde53186d3ae3dbbfaa46704ef3192069687d701922e0063b0a25246c4`.
+- The bundled .NET 6.0.7 x64 runtime was downloaded from Microsoft and verified
+  against the official SHA-512
+  `8124484bfe21f0cf7c2bb4b15992afc8cd9fdb676f7c3f36cb720c3f1459107b2bb8a5ced770fd40292a0c42f5fe24cb39bcb064d06e4f20fdbf11ef5dd55140`.
+  Its `LICENSE.txt` and `ThirdPartyNotices.txt` are installed beside the runtime.
 - The Coop-Divers release ZIP SHA-256 is
   `ede121676daa1019d4368206f831e81de963463718c7907938ee4ab6e49d32d7`.
+- The Steam Deck/Linux downloader targets the Windows game running through
+  Proton; set `WINEDLLOVERRIDES="winhttp=n,b" %command%` in Steam launch options.
 - Dave the Diver and its game files/assets are not included.
