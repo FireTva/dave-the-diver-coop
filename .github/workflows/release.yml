@@ -1,5 +1,12 @@
 name: Build installer
 
+
+
+
+
+
+
+
 on:
   push:
     branches: [main]
@@ -12,39 +19,87 @@ on:
         required: false
         type: string
 
+
+
+
+
+
+
+
 permissions:
   contents: write
+
+
+
+
+
+
+
 
 jobs:
   build:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+
+
+
+
+
+
+
+
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
+
+
+
+
+
+
+
+
       - name: Build and verify pinned packages
         shell: pwsh
         run: |
-          dotnet run --project .\DaveDiverCoopInstaller.csproj -c Release -- --verify
+          dotnet run --project ./DaveDiverCoopInstaller.csproj -c Release -- --verify
           if ($LASTEXITCODE -ne 0) { throw "Package verification failed." }
+          dotnet run --project ./DaveDiverSteamInviteSetup.csproj -c Release -- --verify
+          if ($LASTEXITCODE -ne 0) { throw "Steam-invite package verification failed." }
       - name: Publish self-contained Windows x64 installer
         shell: pwsh
         run: |
-          dotnet publish .\DaveDiverCoopInstaller.csproj -c Release -r win-x64 --self-contained true `
-            -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true `
-            -p:IncludeNativeLibrariesForSelfExtract=true -o .\publish
+          dotnet publish ./DaveDiverCoopInstaller.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o ./publish/community
           if ($LASTEXITCODE -ne 0) { throw "Installer publish failed." }
-          $hash = (Get-FileHash .\publish\DaveDiverCoopSetup.exe -Algorithm SHA256).Hash.ToLowerInvariant()
-          "$hash  DaveDiverCoopSetup.exe" | Set-Content .\publish\DaveDiverCoopSetup.exe.sha256 -Encoding ascii
+          dotnet publish ./DaveDiverSteamInviteSetup.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o ./publish/steam-invite
+          if ($LASTEXITCODE -ne 0) { throw "Steam-invite installer publish failed." }
+          foreach ($name in @("DaveDiverCoopSetup", "DaveDiverSteamInviteSetup")) {
+            $folder = if ($name -eq "DaveDiverCoopSetup") { "community" } else { "steam-invite" }
+            $file = "./publish/$folder/$name.exe"
+            $hash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $name.exe" | Set-Content "$file.sha256" -Encoding ascii
+          }
+          Copy-Item ./SteamInvitePrototype-source.zip ./publish/SteamInvitePrototype-source.zip
       - uses: actions/upload-artifact@v4
         with:
-          name: DaveDiverCoopSetup-win-x64
+          name: DaveDiverCoopInstallers-win-x64
           path: |
-            publish/DaveDiverCoopSetup.exe
-            publish/DaveDiverCoopSetup.exe.sha256
+            publish/community/DaveDiverCoopSetup.exe
+            publish/community/DaveDiverCoopSetup.exe.sha256
+            publish/steam-invite/DaveDiverSteamInviteSetup.exe
+            publish/steam-invite/DaveDiverSteamInviteSetup.exe.sha256
+            publish/SteamInvitePrototype-source.zip
           if-no-files-found: error
           retention-days: 30
+
+
+
+
+
+
+
+
       - name: Publish GitHub release
         if: startsWith(github.ref, 'refs/tags/v') || inputs.release_tag != ''
         shell: pwsh
@@ -54,9 +109,4 @@ jobs:
         run: |
           $tag = $env:RELEASE_TAG
           if (-not $tag) { $tag = $env:GITHUB_REF_NAME }
-          gh release create "$tag" `
-            .\publish\DaveDiverCoopSetup.exe `
-            .\publish\DaveDiverCoopSetup.exe.sha256 `
-            --target main `
-            --title "Dave the Diver Co-op Setup $tag" `
-            --notes "Self-contained Windows x64 installer. See the repository README for tested status and networking security limitations."
+          gh release create "$tag" ./publish/community/DaveDiverCoopSetup.exe ./publish/community/DaveDiverCoopSetup.exe.sha256 ./publish/steam-invite/DaveDiverSteamInviteSetup.exe ./publish/steam-invite/DaveDiverSteamInviteSetup.exe.sha256 ./publish/SteamInvitePrototype-source.zip --target main --title "Dave the Diver Co-op Setup $tag" --notes "Two separate self-contained Windows x64 installers: the existing Coop-Divers setup and an experimental Steam-invite prototype. The invite prototype has not been verified in a two-client game session and synchronizes only diver position/facing. See README for limitations and networking details."
