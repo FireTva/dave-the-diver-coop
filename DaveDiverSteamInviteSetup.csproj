@@ -8,7 +8,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>DaveDiverSteamInviteSetup</AssemblyName>
     <RootNamespace>DaveDiverCoopInstaller</RootNamespace>
-    <Version>1.1.2</Version>
+    <Version>1.1.5</Version>
     <DefineConstants>$(DefineConstants);STEAM_INVITE_SETUP</DefineConstants>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>

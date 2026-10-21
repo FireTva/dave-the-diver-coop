@@ -26,14 +26,19 @@ This folder contains a separate Steam-lobby/SteamNetworkingMessages prototype.
 It builds against the isolated game's generated interop assemblies. In-game,
 the **Co-op Settings** panel appears as an overlay, including while the game's
 Settings screen is open. This does not add controls to the game's native Settings
-menu. Players can host or join a friends-only Steam lobby from any in-game scene.
-The lobby remains active as players move between scenes; each member's current
-scene and friend name are shown in the panel.
+menu. Players can host or join a friends-only Steam lobby from the Blue Hole,
+boat lobby, or sushi bar. The lobby remains active as players move between
+scenes; each member's current scene and friend name are shown in the panel.
 
-The plugin draws the other player's diver as a tinted copy of the local diver
-sprite only when both players are in the same Blue Hole scene. At the boat and
-sushi bar it reports the friend's scene, but does not render a second character
-or synchronize restaurant, boat, story, or other world interactions.
+The plugin draws the other player's avatar as a tinted copy of the local
+character sprite when both players are in the same Blue Hole scene, boat, or
+sushi-bar scene. In the boat and sushi bar, this is a visual movement proxy; it
+does not collide, activate interactions, or synchronize restaurant, boat, story,
+or other world state. Hosts and guests can create/join while in the Blue Hole,
+boat lobby, or sushi bar, and must be in the same scene to see the shared avatar.
+These scene-specific avatar paths still need two-client testing. The co-op
+overlay has a Hide button and a compact Show button; its panel uses an opaque
+dark background to remain legible over gameplay.
 
 The return-to-boat action is intercepted while a partner is connected. The
 requesting player waits for the other player to accept or decline; accepting
@@ -42,7 +47,7 @@ reliable SteamNetworkingMessages, but has not been verified in a two-client
 session.
 
 **Neither mod has been verified in a two-client session here.** This prototype has
-not tested hosting/joining, live packet exchange, or an in-dive remote diver.
+not tested hosting/joining, live packet exchange, or a shared remote avatar.
 Treat it as a development build, not a release. It synchronizes only diver
 position and facing: fish, items, oxygen, damage, enemies, map generation,
 interactions, and other world state are not synchronized, so it does not create a
@@ -67,8 +72,8 @@ The source is MIT licensed; see [LICENSE](./LICENSE).
 ## Steam invite controls
 
 Both players must launch the game and use the same game build and plugin. From
-any in-game scene, the host selects **Host friends-only session**, then **Invite
-Steam friend** to open Steam's friend-invite overlay. The guest accepts the
+the Blue Hole, boat lobby, or sushi bar, the host selects **Host friends-only
+session**, then **Invite Steam friend** to open Steam's friend-invite overlay. The guest accepts the
 invite and opens the game world; the plugin joins the invitation once a gameplay
 scene is active. Alternatively, the guest can join using the displayed Steam
 lobby ID. The lobby is limited to two players and checks the game build and mod

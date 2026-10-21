@@ -45,6 +45,10 @@
       <HintPath>$(BepInExInteropPath)\UnityEngine.CoreModule.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="UnityEngine.TextRenderingModule"
+               Condition="Exists('$(BepInExInteropPath)\UnityEngine.TextRenderingModule.dll')">
+      <HintPath>$(BepInExInteropPath)\UnityEngine.TextRenderingModule.dll</HintPath>
+    </Reference>
     <Reference Include="UnityEngine.IMGUIModule"
                Condition="Exists('$(BepInExInteropPath)\UnityEngine.IMGUIModule.dll')">
       <HintPath>$(BepInExInteropPath)\UnityEngine.IMGUIModule.dll</HintPath>

@@ -8,7 +8,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>DaveDiverCoopSetup</AssemblyName>
     <RootNamespace>DaveDiverCoopInstaller</RootNamespace>
-    <Version>1.1.2</Version>
+    <Version>1.1.5</Version>
   </PropertyGroup>
 
   <ItemGroup>

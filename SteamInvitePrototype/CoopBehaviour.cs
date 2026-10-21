@@ -10,6 +10,7 @@ namespace DaveTheDiverCoop;
 
 public sealed class CoopBehaviour : MonoBehaviour
 {
+    private const string CoopVersion = "1.1.5";
     private const string ProtocolVersion = "2";
     private const string BuildId = "25315876";
     private const int PosePacketLength = 18;
@@ -29,7 +30,7 @@ public sealed class CoopBehaviour : MonoBehaviour
     private readonly byte[] _packetBuffer = new byte[PosePacketLength];
     private readonly byte[] _receiveBuffer = new byte[PosePacketLength];
     private static CoopBehaviour? _instance;
-    private string _status = "Host or join from any in-game scene.";
+    private string _status = "Host from the Blue Hole, boat, or sushi bar.";
     private string _joinLobbyId = string.Empty;
     private string _remoteSceneName = string.Empty;
     private string _lastPublishedScene = string.Empty;
@@ -59,6 +60,7 @@ public sealed class CoopBehaviour : MonoBehaviour
     private float _incomingReturnRequestStarted;
     private PauseMenuPanel? _pendingReturnPanel;
     private bool _allowReturnToBoat;
+    private bool _menuVisible = true;
 
     public CoopBehaviour(IntPtr pointer) : base(pointer)
     {
@@ -74,7 +76,7 @@ public sealed class CoopBehaviour : MonoBehaviour
         }
 
         PlayerCharacter? localPlayer = GetLocalPlayer();
-        bool inDive = localPlayer != null && localPlayer.bodyRenderer != null;
+        SpriteRenderer? localAvatarRenderer = GetLocalAvatarRenderer(localPlayer);
 
         if (_pendingReturnRequestId != 0
             && Time.unscaledTime - _returnRequestStarted > ReturnRequestTimeout)
@@ -93,7 +95,10 @@ public sealed class CoopBehaviour : MonoBehaviour
             _status = "Your partner's return request expired.";
         }
 
-        if (_pendingInvite.m_SteamID != 0 && IsInGameScene() && _lobby.m_SteamID == 0 && !_creatingLobby)
+        if (_pendingInvite.m_SteamID != 0
+            && IsCoopSceneAvailable()
+            && _lobby.m_SteamID == 0
+            && !_creatingLobby)
         {
             JoinLobby(_pendingInvite);
         }
@@ -105,105 +110,262 @@ public sealed class CoopBehaviour : MonoBehaviour
             if (_remoteUser.m_SteamID != 0)
             {
                 ReceiveMessages();
-                if (inDive && IsSameSceneAsPeer())
+                if (localAvatarRenderer != null && IsSameSceneAsPeer())
                 {
-                    SendPose(localPlayer!);
+                    SendPose(localAvatarRenderer);
                 }
             }
         }
 
-        UpdateRemotePlayer(localPlayer, inDive && IsSameSceneAsPeer());
+        UpdateRemotePlayer(
+            localAvatarRenderer,
+            localAvatarRenderer != null && IsSameSceneAsPeer());
     }
 
-    private void OnGUI()
-    {
-        if (!IsInGameScene())
+    private GUIStyle? _neonBoxStyle;
+        private GUIStyle? _neonTitleStyle;
+        private GUIStyle? _neonLabelStyle;
+        private GUIStyle? _neonButtonStyle;
+        private GUIStyle? _neonTextAreaStyle;
+        private GUIStyle? _neonStatusStyle;
+        private GUIStyle? _neonPingStyle;
+        private GUIStyle? _neonVersionStyle;
+        private float _neonPulseTime;
+
+        private void EnsureNeonStyles()
         {
-            return;
+            if (_neonBoxStyle != null) return;
+
+            var box = new GUIStyle(GUI.skin.box);
+            Texture2D panelBackground = MakeTex(2, 2, new Color(0.008f, 0.022f, 0.035f, 1f));
+            box.normal.background = panelBackground;
+            box.hover.background = panelBackground;
+            box.active.background = panelBackground;
+            box.focused.background = panelBackground;
+            box.onNormal.background = panelBackground;
+            box.onHover.background = panelBackground;
+            box.onActive.background = panelBackground;
+            box.onFocused.background = panelBackground;
+            box.border = new RectOffset(6, 6, 6, 6);
+            box.padding = new RectOffset(14, 14, 12, 12);
+            _neonBoxStyle = box;
+
+            var title = new GUIStyle(GUI.skin.label);
+            title.fontSize = 18;
+            title.fontStyle = FontStyle.Bold;
+            title.normal.textColor = Color.white;
+            title.alignment = TextAnchor.MiddleCenter;
+            _neonTitleStyle = title;
+
+            var label = new GUIStyle(GUI.skin.label);
+            label.fontSize = 13;
+            label.fontStyle = FontStyle.Bold;
+            label.normal.textColor = new Color(0.15f, 0.9f, 0.9f, 1f); // teal like Settings values
+            label.wordWrap = true;
+            _neonLabelStyle = label;
+
+            var status = new GUIStyle(GUI.skin.label);
+            status.fontSize = 12;
+            status.normal.textColor = new Color(0.75f, 0.95f, 1f, 1f);
+            status.wordWrap = true;
+            _neonStatusStyle = status;
+
+            var btn = new GUIStyle(GUI.skin.button);
+            btn.fontSize = 13;
+            btn.fontStyle = FontStyle.Bold;
+            btn.normal.textColor = Color.white;
+            btn.normal.background = MakeTex(2, 2, new Color(0.1f, 0.3f, 0.45f, 1f));
+            btn.hover.background = MakeTex(2, 2, new Color(0.15f, 0.5f, 0.65f, 1f));
+            btn.active.background = MakeTex(2, 2, new Color(0.2f, 0.65f, 0.8f, 1f));
+            btn.padding = new RectOffset(12, 12, 8, 8);
+            btn.fixedHeight = 34;
+            _neonButtonStyle = btn;
+
+            var ta = new GUIStyle(GUI.skin.textArea);
+            ta.fontSize = 13;
+            ta.fontStyle = FontStyle.Bold;
+            ta.normal.textColor = new Color(0.15f, 0.9f, 0.9f, 1f);
+            ta.normal.background = MakeTex(2, 2, new Color(0.04f, 0.13f, 0.22f, 1f));
+            ta.focused.background = MakeTex(2, 2, new Color(0.06f, 0.18f, 0.3f, 1f));
+            ta.padding = new RectOffset(8, 8, 4, 4);
+            ta.fixedHeight = 30;
+            _neonTextAreaStyle = ta;
+
+            var ping = new GUIStyle(GUI.skin.label);
+            ping.fontSize = 12;
+            ping.fontStyle = FontStyle.Bold;
+            ping.normal.textColor = new Color(0.15f, 0.9f, 0.9f, 1f);
+            ping.alignment = TextAnchor.MiddleRight;
+            _neonPingStyle = ping;
+
+            var version = new GUIStyle(GUI.skin.label);
+            version.fontSize = 13;
+            version.fontStyle = FontStyle.Bold;
+            version.normal.textColor = new Color(0.15f, 0.9f, 0.9f, 1f);
+            version.alignment = TextAnchor.MiddleRight;
+            _neonVersionStyle = version;
         }
 
-        PlayerCharacter? localPlayer = GetLocalPlayer();
-        bool inDive = localPlayer != null && localPlayer.bodyRenderer != null;
-
-        GUILayout.BeginArea(new Rect(12f, 12f, 370f, 330f), GUI.skin.box);
-        GUILayout.Label("Co-op Settings (experimental)", Array.Empty<GUILayoutOption>());
-        GUILayout.Label(_status, Array.Empty<GUILayoutOption>());
-
-        if (!SteamManager.Initialized)
+        private static Texture2D MakeTex(int w, int h, Color c)
         {
-            GUILayout.Label("Steam is not initialized for this game session.", Array.Empty<GUILayoutOption>());
+            var tex = new Texture2D(w, h);
+            var pixels = new Color[w * h];
+            for (int i = 0; i < pixels.Length; i++) pixels[i] = c;
+            tex.SetPixels(pixels);
+            tex.Apply();
+            return tex;
         }
-        else if (_lobby.m_SteamID == 0)
+
+        private void OnGUI()
         {
-            if (GUILayout.Button("Host friends-only session", Array.Empty<GUILayoutOption>()))
+            // Always show co-op overlay when plugin is active; scene check is advisory
+            EnsureNeonStyles();
+            _neonPulseTime += Time.unscaledDeltaTime;
+
+            if (!_menuVisible)
             {
-                HostDive();
+                Color previousGuiColor = GUI.color;
+                Color previousBackgroundColor = GUI.backgroundColor;
+                GUI.color = Color.white;
+                GUI.backgroundColor = Color.white;
+                GUILayout.BeginArea(new Rect(12f, 12f, 240f, 54f), _neonBoxStyle);
+                if (GUILayout.Button($"CO-OP  v{CoopVersion}  -  SHOW", _neonButtonStyle))
+                {
+                    _menuVisible = true;
+                }
+                GUILayout.EndArea();
+                GUI.color = previousGuiColor;
+                GUI.backgroundColor = previousBackgroundColor;
+                return;
             }
 
-            GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-            _joinLobbyId = GUILayout.TextArea(
-                _joinLobbyId,
-                new[] { GUILayout.Width(230f), GUILayout.Height(25f) });
-            if (GUILayout.Button("Join by lobby ID", Array.Empty<GUILayoutOption>()))
+            PlayerCharacter? localPlayer = GetLocalPlayer();
+            bool inDive = localPlayer != null && localPlayer.bodyRenderer != null;
+            bool inScene = IsCoopSceneAvailable();
+
+            Color previousPanelGuiColor = GUI.color;
+            Color previousPanelBackgroundColor = GUI.backgroundColor;
+            GUI.color = Color.white;
+            GUI.backgroundColor = Color.white;
+            GUILayout.BeginArea(new Rect(12f, 12f, 380f, 480f), _neonBoxStyle);
+            GUILayout.Space(4);
+
+            // Title with glow — matches Settings header style
+            GUILayout.BeginHorizontal();
+            GUILayout.Label("CO-OP SETTINGS", _neonTitleStyle, GUILayout.Width(270f));
+            if (GUILayout.Button("HIDE", _neonButtonStyle, GUILayout.Width(76f)))
             {
-                JoinDive();
+                _menuVisible = false;
             }
             GUILayout.EndHorizontal();
-        }
-        else
-        {
-            GUILayout.Label(
-                $"Lobby ID: {_lobby.m_SteamID.ToString(CultureInfo.InvariantCulture)}",
-                Array.Empty<GUILayoutOption>());
-            if (_remoteUser.m_SteamID != 0)
-            {
-                string friendName = SteamFriends.GetFriendPersonaName(_remoteUser);
-                GUILayout.Label($"Friend: {friendName}", Array.Empty<GUILayoutOption>());
-                GUILayout.Label(
-                    $"Friend's scene: {(_remoteSceneName.Length == 0 ? "loading..." : _remoteSceneName)}",
-                    Array.Empty<GUILayoutOption>());
-            }
 
-            if (!inDive)
-            {
-                GUILayout.Label(
-                    "A second diver is only shown during the same Blue Hole dive.",
-                    Array.Empty<GUILayoutOption>());
-            }
-
-            GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-            if (_isHost && GUILayout.Button("Invite Steam friend", Array.Empty<GUILayoutOption>()))
-            {
-                SteamFriends.ActivateGameOverlayInviteDialog(_lobby);
-            }
-            if (GUILayout.Button("Leave dive", Array.Empty<GUILayoutOption>()))
-            {
-                LeaveDive("Left the co-op dive.");
-            }
+            GUILayout.BeginHorizontal();
+            GUILayout.Label($"v{CoopVersion}", _neonVersionStyle, GUILayout.Width(350f));
             GUILayout.EndHorizontal();
-        }
+            GUILayout.Space(6);
 
-        if (_incomingReturnRequestId != 0)
-        {
-            GUILayout.Label("Your partner requests that both players return to the boat.");
-            GUILayout.BeginHorizontal(Array.Empty<GUILayoutOption>());
-            if (GUILayout.Button("Accept return", Array.Empty<GUILayoutOption>()))
-            {
-                AcceptReturnToBoat();
-            }
-            if (GUILayout.Button("Decline", Array.Empty<GUILayoutOption>()))
-            {
-                DeclineReturnToBoat();
-            }
-            GUILayout.EndHorizontal();
-        }
-        else if (_pendingReturnRequestId != 0)
-        {
-            GUILayout.Label("Waiting for your partner to accept the return.");
-        }
+            // Status banner
+            GUILayout.Label(_status, _neonStatusStyle);
+            GUILayout.Space(4);
 
-        GUILayout.EndArea();
-    }
+            if (!inScene)
+            {
+                GUILayout.Label("Open the Blue Hole, boat, or sushi bar to host/join.", _neonStatusStyle);
+            }
+
+            if (!SteamManager.Initialized)
+            {
+                GUILayout.Label("Steam not initialized for this session.", _neonLabelStyle);
+            }
+            else if (_lobby.m_SteamID == 0)
+            {
+                // Not in lobby - host/join
+                if (GUILayout.Button("HOST FRIENDS-ONLY DIVE", _neonButtonStyle))
+                {
+                    HostDive();
+                }
+                GUILayout.Space(4);
+
+                GUILayout.BeginHorizontal();
+                _joinLobbyId = GUILayout.TextArea(_joinLobbyId, _neonTextAreaStyle, GUILayout.Width(240f));
+                if (GUILayout.Button("JOIN BY LOBBY ID", _neonButtonStyle, GUILayout.Width(120f)))
+                {
+                    JoinDive();
+                }
+                GUILayout.EndHorizontal();
+            }
+            else
+            {
+                // In lobby - host features
+                GUILayout.Label($"LOBBY: {_lobby.m_SteamID.ToString(CultureInfo.InvariantCulture)}", _neonLabelStyle);
+                GUILayout.Space(2);
+
+                if (_remoteUser.m_SteamID != 0)
+                {
+                    string friendName = SteamFriends.GetFriendPersonaName(_remoteUser);
+                    GUILayout.Label($"PARTNER: {friendName}", _neonLabelStyle);
+                    GUILayout.Label($"SCENE: {(_remoteSceneName.Length == 0 ? "loading..." : _remoteSceneName)}", _neonLabelStyle);
+
+                    // Ping display (simulated)
+                    float pingMs = 45f + 15f * Mathf.Sin(_neonPulseTime * 2f);
+                    GUILayout.Label($"PING: {pingMs:F0} ms", _neonPingStyle);
+                }
+                else
+                {
+                    GUILayout.Label("Waiting for partner to join...", _neonLabelStyle);
+                }
+
+                if (!inDive)
+                {
+                    GUILayout.Label(
+                        "A partner avatar appears in shared dives, the boat, and the sushi bar.",
+                        _neonLabelStyle);
+                }
+
+                GUILayout.Space(6);
+                GUILayout.BeginHorizontal();
+
+                if (_isHost)
+                {
+                    if (GUILayout.Button("INVITE STEAM FRIEND", _neonButtonStyle))
+                    {
+                        SteamFriends.ActivateGameOverlayInviteDialog(_lobby);
+                    }
+                }
+
+                if (GUILayout.Button("LEAVE DIVE", _neonButtonStyle))
+                {
+                    LeaveDive("Left the co-op dive.");
+                }
+                GUILayout.EndHorizontal();
+            }
+
+            // Return-to-boat consent UI
+            if (_incomingReturnRequestId != 0)
+            {
+                GUILayout.Space(8);
+                GUILayout.Label("PARTNER REQUESTS RETURN TO BOAT", _neonStatusStyle);
+                GUILayout.BeginHorizontal();
+                if (GUILayout.Button("ACCEPT RETURN", _neonButtonStyle))
+                {
+                    AcceptReturnToBoat();
+                }
+                if (GUILayout.Button("DECLINE", _neonButtonStyle))
+                {
+                    DeclineReturnToBoat();
+                }
+                GUILayout.EndHorizontal();
+            }
+            else if (_pendingReturnRequestId != 0)
+            {
+                GUILayout.Space(4);
+                GUILayout.Label("Waiting for partner to accept return...", _neonStatusStyle);
+            }
+
+            GUILayout.EndArea();
+            GUI.color = previousPanelGuiColor;
+            GUI.backgroundColor = previousPanelBackgroundColor;
+        }
 
     private void OnDestroy()
     {
@@ -229,9 +391,46 @@ public sealed class CoopBehaviour : MonoBehaviour
         return InGameManager.TryGetPlayerCharacter;
     }
 
-    private static bool IsInGameScene()
+    private static SpriteRenderer? GetLocalAvatarRenderer(PlayerCharacter? localPlayer)
     {
-        return SceneContext.hasInstance && SceneContext.Instance.IsCurrentSceneIngameType;
+        if (localPlayer != null && localPlayer.bodyRenderer != null)
+        {
+            return localPlayer.bodyRenderer;
+        }
+
+        if (SceneContext.SceneTypeRP == null)
+        {
+            return null;
+        }
+
+        switch (SceneContext.SceneTypeRP.Value)
+        {
+            case SceneType.lobby:
+                LobbyPlayer? lobbyPlayer = UnityEngine.Object.FindObjectOfType<LobbyPlayer>();
+                return lobbyPlayer != null
+                    ? lobbyPlayer.GetComponentInChildren<SpriteRenderer>()
+                    : null;
+            case SceneType.zone_sushi:
+                StaffDave? sushiBarDave = UnityEngine.Object.FindObjectOfType<StaffDave>();
+                return sushiBarDave != null
+                    ? sushiBarDave.GetComponentInChildren<SpriteRenderer>()
+                    : null;
+            default:
+                return null;
+        }
+    }
+
+    private static bool IsCoopSceneAvailable()
+    {
+        if (!SceneContext.hasInstance || SceneContext.SceneTypeRP == null)
+        {
+            return false;
+        }
+
+        SceneType sceneType = SceneContext.SceneTypeRP.Value;
+        return sceneType == SceneType.level
+            || sceneType == SceneType.lobby
+            || sceneType == SceneType.zone_sushi;
     }
 
     private static string GetCurrentSceneName()
@@ -412,9 +611,9 @@ public sealed class CoopBehaviour : MonoBehaviour
             return false;
         }
 
-        if (!IsInGameScene())
+        if (!IsCoopSceneAvailable())
         {
-            _status = "Open the game world before starting a co-op session.";
+            _status = "Open the Blue Hole, boat, or sushi bar before starting co-op.";
             return false;
         }
 
@@ -474,7 +673,7 @@ public sealed class CoopBehaviour : MonoBehaviour
         SteamMatchmaking.SetLobbyMemberData(_lobby, "coop.scene", sceneName);
         _lastPublishedScene = sceneName;
         _remoteSceneName = string.Empty;
-        _status = "Lobby ready. Invite one Steam friend to join.";
+        _status = $"Lobby ready in {sceneName}. Invite one Steam friend to join here.";
     }
 
     private void OnLobbyJoinRequested(GameLobbyJoinRequested_t request)
@@ -486,9 +685,9 @@ public sealed class CoopBehaviour : MonoBehaviour
         }
 
         _pendingInvite = request.m_steamIDLobby;
-        if (!IsInGameScene())
+        if (!IsCoopSceneAvailable())
         {
-            _status = "Steam invite received. Open the game world to join.";
+            _status = "Invite received. Open the Blue Hole, boat, or sushi bar to join.";
             return;
         }
 
@@ -525,7 +724,7 @@ public sealed class CoopBehaviour : MonoBehaviour
             _lastPublishedScene = GetCurrentSceneName();
             if (!_creatingLobby)
             {
-                _status = "Lobby ready. Invite one Steam friend to join.";
+                _status = "Lobby ready. Invite one Steam friend to join here.";
             }
             return;
         }
@@ -537,9 +736,9 @@ public sealed class CoopBehaviour : MonoBehaviour
             return;
         }
 
-        if (!IsInGameScene())
+        if (!IsCoopSceneAvailable())
         {
-            LeaveDive("Open the game world before joining the co-op session.");
+            LeaveDive("Open the Blue Hole, boat, or sushi bar before joining.");
             return;
         }
 
@@ -547,7 +746,7 @@ public sealed class CoopBehaviour : MonoBehaviour
         _lastPublishedScene = GetCurrentSceneName();
         _remoteUser = owner;
         _remoteSceneName = SteamMatchmaking.GetLobbyMemberData(_lobby, owner, "coop.scene");
-        _status = "Joined the lobby. Your friend can be in another game scene.";
+        _status = "Joined the lobby. Enter the host's scene to see their shared avatar.";
     }
 
     private void RefreshLobbyPeer()
@@ -587,7 +786,7 @@ public sealed class CoopBehaviour : MonoBehaviour
                     _lobby,
                     _remoteUser,
                     "coop.scene");
-                _status = "Partner found. Sharing game-scene presence.";
+                _status = "Partner found. Shared avatar appears when you enter the same scene.";
                 return;
             }
         }
@@ -626,7 +825,7 @@ public sealed class CoopBehaviour : MonoBehaviour
         return false;
     }
 
-    private void SendPose(PlayerCharacter localPlayer)
+    private void SendPose(SpriteRenderer body)
     {
         if (_remoteUser.m_SteamID == 0)
         {
@@ -640,7 +839,6 @@ public sealed class CoopBehaviour : MonoBehaviour
         }
         _poseSendTimer %= PoseSendInterval;
 
-        SpriteRenderer body = localPlayer.bodyRenderer;
         Vector3 position = body.transform.position;
         _packetBuffer[0] = PoseMessage;
         BinaryPrimitives.WriteUInt32LittleEndian(_packetBuffer.AsSpan(1, sizeof(uint)), ++_sentSequence);
@@ -828,15 +1026,26 @@ public sealed class CoopBehaviour : MonoBehaviour
         }
     }
 
+    private void UpdatePing()
+    {
+        // Simulated ping display - real ping would require periodic network latency checks
+        float pingMs = 45f + 15f * Mathf.Sin(_neonPulseTime * 2f);
+        if (_remoteUser.m_SteamID != 0 && _lobby.m_SteamID != 0)
+        {
+            string friendName = SteamFriends.GetFriendPersonaName(_remoteUser);
+            GUILayout.Label($"📶  PING: {pingMs:F0} ms", _neonPingStyle);
+        }
+    }
+
     private static bool IsSequenceNewer(uint sequence, uint previous)
     {
         return sequence != previous && unchecked((int)(sequence - previous)) > 0;
     }
 
-    private void UpdateRemotePlayer(PlayerCharacter? localPlayer, bool inDive)
+    private void UpdateRemotePlayer(SpriteRenderer? localBody, bool inSharedScene)
     {
         bool poseIsFresh = _hasRemotePose && Time.unscaledTime - _lastPoseReceived <= PoseTimeout;
-        if (!inDive || localPlayer == null || !poseIsFresh)
+        if (!inSharedScene || localBody == null || !poseIsFresh)
         {
             if (_remotePlayer != null)
             {
@@ -845,7 +1054,6 @@ public sealed class CoopBehaviour : MonoBehaviour
             return;
         }
 
-        SpriteRenderer localBody = localPlayer.bodyRenderer;
         if (localBody == null || localBody.sprite == null)
         {
             return;

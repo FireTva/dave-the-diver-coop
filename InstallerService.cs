@@ -14,7 +14,7 @@ internal static class InstallerService
     private const string SteamInviteResourceName =
         "DaveDiverCoopInstaller.DaveTheDiverCoop.dll";
     private const string SteamInviteSha256 =
-        "e35620d29c1acc74b8f0f0a85549aaeff027ae2502f7eac894f3f1fd7da9853b";
+        "d1863daeb34bd807f451902fbe2c5bb2bc1cb21d737c8a465567d073587127af";
     private const string LicenseResourceName = "DaveDiverCoopInstaller.LICENSE";
     private const string ModDownloadUrl =
         "https://github.com/S1ii/Coop-Divers/releases/download/v0.18.3-ci.26/DaveTheDiverMP-0.18.3-ci.26.zip";
@@ -757,9 +757,17 @@ internal static class InstallerService
     private static void VerifySha256(byte[] bytes, string expected, string packageName)
     {
         string actual = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+        // Accept "sha256sum" style values: "<hash>  <filename>"
+        string cleanExpected = expected.Trim().Split(' ', '\t')[0].Trim().ToLowerInvariant();
+        if (cleanExpected.Length != 64
+            || !cleanExpected.All(c => (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')))
+        {
+            throw new InvalidDataException($"{packageName} SHA-256 reference is malformed.");
+        }
+
         if (!CryptographicOperations.FixedTimeEquals(
             Convert.FromHexString(actual),
-            Convert.FromHexString(expected)))
+            Convert.FromHexString(cleanExpected)))
         {
             throw new InvalidDataException($"{packageName} SHA-256 verification failed.");
         }

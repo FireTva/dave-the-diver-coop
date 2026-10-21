@@ -62,7 +62,7 @@ loader version. Replaced copies of the mod DLL/license are backed up beside the
 installed files. The Linux downloader applies the same BepInEx core build check,
 preserves existing files, and backs up the previous co-op plugin before switching.
 
-The v1.1.2 installer includes the .NET 6.0.7 runtime and the Microsoft.Extensions
+The v1.1.5 installer includes the .NET 6.0.7 runtime and the Microsoft.Extensions
 assemblies required by BepInEx to start. It repairs an existing compatible
 installation when the runtime or those support assemblies are missing, without
 overwriting existing runtime files. The first game launch after installation can
@@ -81,15 +81,15 @@ We have not verified a two-client connection, so this installer does not claim
 that online co-op works end-to-end.
 
 The separate Steam-invite prototype provides in-game host/join controls and a
-friends-only Steam lobby. Its Co-op Settings overlay is visible during gameplay
-and while the game's Settings screen is open; it does not add buttons to the
-native Settings menu. Lobby membership and scene presence persist across game
-scenes. A second diver is rendered only when both players are in the same Blue
-Hole dive; in boat and sushi-bar scenes the panel shows the friend's name and
-scene but does not render a second character or synchronize world interactions.
-Returning from a dive while connected uses an accept/decline request. None of the
-Steam-invite scene-presence, return-vote, or two-client flows have been verified
-with a second client, so this remains experimental.
+friends-only Steam lobby. Its hideable Co-op Settings overlay uses a solid dark
+background and is visible during gameplay and while the game's Settings screen
+is open; it does not add buttons to the native Settings menu. Hosts can create
+or join a lobby from the Blue Hole, boat, or sushi bar. A visual partner avatar
+is attempted when both players are in the same supported scene. Boat and
+sushi-bar avatars are movement proxies only: interactions and shared world or
+story state are not synchronized. Returning from a dive while connected uses an
+accept/decline request. Two-client gameplay has not been verified, so this
+remains experimental.
 
 Do not install on a game copy that is currently running. This helper does not
 touch saves, create firewall rules, configure routers, or alter Steam Cloud.
