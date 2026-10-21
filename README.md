@@ -3,6 +3,7 @@
 A Windows x64 installer for the community [Coop-Divers](https://github.com/S1ii/Coop-Divers)
 pre-release. This is an unofficial helper for the Dave the Diver co-op work tracked
 in [coop-anything issue #42](https://github.com/cranebeaker/coop-anything/issues/42).
+If you find a bug, let me know, I’d appreciate it, ty.
 
 ## Download and quick start
 
